@@ -5,13 +5,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "../AdHocUWB/Inc/adhocuwb_dynamic_swarm_ranging.h"
+#include "../AdHocUWB/Inc/adhocuwb_ranging.h"
+#include "../AdHocUWB/Inc/adhocuwb_ranging_alg_dsr.h"
 
 
 #define     LISTENED_DRONES 2
 #define     FILENAME_SIZE   32
 #define     MAX_PACKET_SIZE 256
-#define     MAGIC_MATCH     0xBB88
+#define     MAGIC_MATCH     0xBBBB
 #define     VENDOR_ID       0x0483
 #define     PRODUCT_ID      0x5740
 
@@ -95,19 +96,26 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
             if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
                 response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
                 if (response == 0 && transferred == meta->msgLength) {
-                    Ranging_Message_t rangingMessage;
-                    memcpy(&rangingMessage, payload, sizeof(Ranging_Message_t));
+                    Body_Datagram_t bodyDatagram;
+                    memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
+
+                    if(bodyDatagram.header.type != BODY_DATAGRAM_DSR) {
+                        printf("Not DSR message\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    Ranging_DSR_Message_t *rangingMessage = (Ranging_DSR_Message_t*)bodyDatagram.payload;
 
                     // header
-                    fprintf(file, "%u,%u,%u,%u,", rangingMessage.header.srcAddress, rangingMessage.header.msgSequence, rangingMessage.header.msgLength, rangingMessage.header.filter);
+                    fprintf(file, "%u,%u,%u,%u,", rangingMessage->header.srcAddress, rangingMessage->header.msgSequence, rangingMessage->header.msgLength, rangingMessage->header.filter);
 
                     for(int i = 0; i < MESSAGE_TX_POOL_SIZE; i++) {
-                        fprintf(file, "%lu,%u,", rangingMessage.header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage.header.Txtimestamps[i].seqNumber);
+                        fprintf(file, "%lu,%u,", rangingMessage->header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->header.Txtimestamps[i].seqNumber);
                     }
 
                     // bodyunit
                     for(int i = 0; i < MESSAGE_BODYUNIT_SIZE && i < LISTENED_DRONES - 1; i++) {
-                        fprintf(file, "%u,%lu,%u,", rangingMessage.bodyUnits[i].address, rangingMessage.bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage.bodyUnits[i].seqNumber);
+                        fprintf(file, "%u,%lu,%u,", rangingMessage->bodyUnits[i].address, rangingMessage->bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->bodyUnits[i].seqNumber);
                     }
                     fprintf(file, "\n");
                 }
