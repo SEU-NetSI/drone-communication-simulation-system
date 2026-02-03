@@ -57,14 +57,13 @@ uint64_t get_system_time() {
 void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
     uint8_t buffer[MAX_PACKET_SIZE];
     uint8_t payload[MAX_PACKET_SIZE];
-    uint8_t endpoint = 0x81; 
+    uint8_t endpoint = 0x81;
     int transferred;
-
 
     while (keep_running) {
         // first reception
         int response = libusb_bulk_transfer(device_handle, endpoint, buffer, MAX_PACKET_SIZE, &transferred, 5000);
-        
+
         // success
         if(response == 0 && transferred <= MAX_PACKET_SIZE) {
             printf("response: %d, transferred: %d\n", response, transferred);
@@ -93,55 +92,56 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
                 printf("listen %d lines...\n", listen_lines - ignore_lines);
             }
 
-            Sniffer_Meta_t *meta = (Sniffer_Meta_t *)buffer;
-            uint64_t system_time = get_system_time();
-            fprintf(file, "%lu,", system_time);
 
-            if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
-                printf("entering second bulk transfer...\n");
-                response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
-                if (response == 0 && transferred == meta->msgLength) {
-                    if (transferred != sizeof(Body_Datagram_t)) {
-                        printf("Received packet wrong size: %d, not one Body_Datagram_t\n", transferred);
-                        exit(EXIT_FAILURE);
-                    }
+            // Sniffer_Meta_t *meta = (Sniffer_Meta_t *)buffer;
+            // uint64_t system_time = get_system_time();
+            // fprintf(file, "%lu,", system_time);
 
-                    Body_Datagram_t bodyDatagram;
-                    memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
+            // if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
+            //     printf("entering second bulk transfer...\n");
+            //     response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
+            //     if (response == 0 && transferred == meta->msgLength) {
+            //         if (transferred != sizeof(Body_Datagram_t)) {
+            //             printf("Received packet wrong size: %d, not one Body_Datagram_t\n", transferred);
+            //             exit(EXIT_FAILURE);
+            //         }
 
-                    if(bodyDatagram.header.type != BODY_DATAGRAM_DSR) {
-                        printf("Not DSR message\n");
-                        exit(EXIT_FAILURE);
-                    }
+            //         Body_Datagram_t bodyDatagram;
+            //         memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
 
-                    Ranging_DSR_Message_t *rangingMessage = (Ranging_DSR_Message_t*)bodyDatagram.payload;
+            //         if(bodyDatagram.header.type != BODY_DATAGRAM_DSR) {
+            //             printf("Not DSR message\n");
+            //             exit(EXIT_FAILURE);
+            //         }
 
-                    // header
-                    fprintf(file, "%u,%u,%u,%u,", rangingMessage->header.srcAddress, rangingMessage->header.msgSequence, rangingMessage->header.msgLength, rangingMessage->header.filter);
+            //         Ranging_DSR_Message_t *rangingMessage = (Ranging_DSR_Message_t*)bodyDatagram.payload;
 
-                    for(int i = 0; i < MESSAGE_TX_POOL_SIZE; i++) {
-                        fprintf(file, "%lu,%u,", rangingMessage->header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->header.Txtimestamps[i].seqNumber);
-                    }
+            //         // header
+            //         fprintf(file, "%u,%u,%u,%u,", rangingMessage->header.srcAddress, rangingMessage->header.msgSequence, rangingMessage->header.msgLength, rangingMessage->header.filter);
 
-                    // bodyunit
-                    for(int i = 0; i < MESSAGE_BODYUNIT_SIZE && i < LISTENED_DRONES - 1; i++) {
-                        fprintf(file, "%u,%lu,%u,", rangingMessage->bodyUnits[i].address, rangingMessage->bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->bodyUnits[i].seqNumber);
-                    }
-                    fprintf(file, "\n");
-                }
-                // fail
-                else if(transferred > MAX_PACKET_SIZE) {
-                    printf("MAX_PACKET_SIZE is small\n");
-                    exit(EXIT_FAILURE);
-                }
-                else {
-                    printf("Bulk transfer failed: %s\n", libusb_strerror(response));
-                    exit(EXIT_FAILURE);
-                }
-            }
-            else {
-                printf("Magic number mismatch or message length too large: magic=0x%X, msgLength=%u\n", meta->magic, meta->msgLength);
-            }
+            //         for(int i = 0; i < MESSAGE_TX_POOL_SIZE; i++) {
+            //             fprintf(file, "%lu,%u,", rangingMessage->header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->header.Txtimestamps[i].seqNumber);
+            //         }
+
+            //         // bodyunit
+            //         for(int i = 0; i < MESSAGE_BODYUNIT_SIZE && i < LISTENED_DRONES - 1; i++) {
+            //             fprintf(file, "%u,%lu,%u,", rangingMessage->bodyUnits[i].address, rangingMessage->bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->bodyUnits[i].seqNumber);
+            //         }
+            //         fprintf(file, "\n");
+            //     }
+            //     // fail
+            //     else if(transferred > MAX_PACKET_SIZE) {
+            //         printf("MAX_PACKET_SIZE is small\n");
+            //         exit(EXIT_FAILURE);
+            //     }
+            //     else {
+            //         printf("Bulk transfer failed: %s\n", libusb_strerror(response));
+            //         exit(EXIT_FAILURE);
+            //     }
+            // }
+            // else {
+            //     printf("Magic number mismatch or message length too large: magic=0x%X, msgLength=%u\n", meta->magic, meta->msgLength);
+            // }
         }
         // fail
         else if(transferred > MAX_PACKET_SIZE) {
@@ -159,9 +159,6 @@ int main() {
     libusb_device_handle *device_handle = NULL;
     libusb_context *context = NULL;
     FILE *log_file;
-
-    printf("size of rangingDsrMessage: %lu\n", sizeof(Ranging_DSR_Message_t));
-
 
     signal(SIGINT, handle_sigint);
 
