@@ -9,7 +9,7 @@
 #include "../AdHocUWB/Inc/adhocuwb_ranging_alg_dsr.h"
 
 
-#define     LISTENED_DRONES 2
+#define     LISTENED_DRONES 1
 #define     FILENAME_SIZE   32
 #define     MAX_PACKET_SIZE 256
 #define     META_SIZE       sizeof(Sniffer_Meta_t)
@@ -46,6 +46,14 @@ void generate_filename(char *buffer, size_t buffer_size) {
     time(&rawtime);
     curtime = localtime(&rawtime);
     strftime(buffer, buffer_size, "raw_sensor_data.csv", curtime);
+}
+
+void printMetaInfo(Sniffer_Meta_t *meta) {
+    printf("Magic: 0x%X\n", meta->magic);
+    printf("Sender Address: %u\n", meta->senderAddress);
+    printf("Sequence Number: %u\n", meta->seqNumber);
+    printf("Message Length: %u\n", meta->msgLength);
+    printf("RX Time: %lu\n", meta->rxTime);
 }
 
 uint64_t get_system_time() {
@@ -92,56 +100,56 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
                 printf("listen %d lines...\n", listen_lines - ignore_lines);
             }
 
+            Sniffer_Meta_t *meta = (Sniffer_Meta_t*)buffer;
+            uint64_t system_time = get_system_time();
+            fprintf(file, "%lu,", system_time);
 
-            // Sniffer_Meta_t *meta = (Sniffer_Meta_t *)buffer;
-            // uint64_t system_time = get_system_time();
-            // fprintf(file, "%lu,", system_time);
+            // printMetaInfo(meta);
 
-            // if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
-            //     printf("entering second bulk transfer...\n");
-            //     response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
-            //     if (response == 0 && transferred == meta->msgLength) {
-            //         if (transferred != sizeof(Body_Datagram_t)) {
-            //             printf("Received packet wrong size: %d, not one Body_Datagram_t\n", transferred);
-            //             exit(EXIT_FAILURE);
-            //         }
+            if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
+                response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
+                if (response == 0 && transferred == meta->msgLength) {
+                    if (transferred != meta->msgLength) {
+                        printf("Received packet wrong size: %d, not one Body_Datagram_t\n", transferred);
+                        exit(EXIT_FAILURE);
+                    }
 
-            //         Body_Datagram_t bodyDatagram;
-            //         memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
+                    Body_Datagram_t bodyDatagram;
+                    memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
 
-            //         if(bodyDatagram.header.type != BODY_DATAGRAM_DSR) {
-            //             printf("Not DSR message\n");
-            //             exit(EXIT_FAILURE);
-            //         }
+                    if(bodyDatagram.header.type != BODY_DATAGRAM_DSR) {
+                        printf("Not DSR message\n");
+                        exit(EXIT_FAILURE);
+                    }
 
-            //         Ranging_DSR_Message_t *rangingMessage = (Ranging_DSR_Message_t*)bodyDatagram.payload;
+                    Ranging_DSR_Message_t *rangingMessage = (Ranging_DSR_Message_t*)bodyDatagram.payload;
 
-            //         // header
-            //         fprintf(file, "%u,%u,%u,%u,", rangingMessage->header.srcAddress, rangingMessage->header.msgSequence, rangingMessage->header.msgLength, rangingMessage->header.filter);
+                    // header
+                    fprintf(file, "%u,%u,%u,%u,", rangingMessage->header.srcAddress, rangingMessage->header.msgSequence, rangingMessage->header.msgLength, rangingMessage->header.filter);
 
-            //         for(int i = 0; i < MESSAGE_TX_POOL_SIZE; i++) {
-            //             fprintf(file, "%lu,%u,", rangingMessage->header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->header.Txtimestamps[i].seqNumber);
-            //         }
+                    for(int i = 0; i < MESSAGE_TX_POOL_SIZE; i++) {
+                        fprintf(file, "%lu,%u,", rangingMessage->header.Txtimestamps[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->header.Txtimestamps[i].seqNumber);
+                    }
 
-            //         // bodyunit
-            //         for(int i = 0; i < MESSAGE_BODYUNIT_SIZE && i < LISTENED_DRONES - 1; i++) {
-            //             fprintf(file, "%u,%lu,%u,", rangingMessage->bodyUnits[i].address, rangingMessage->bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->bodyUnits[i].seqNumber);
-            //         }
-            //         fprintf(file, "\n");
-            //     }
-            //     // fail
-            //     else if(transferred > MAX_PACKET_SIZE) {
-            //         printf("MAX_PACKET_SIZE is small\n");
-            //         exit(EXIT_FAILURE);
-            //     }
-            //     else {
-            //         printf("Bulk transfer failed: %s\n", libusb_strerror(response));
-            //         exit(EXIT_FAILURE);
-            //     }
-            // }
-            // else {
-            //     printf("Magic number mismatch or message length too large: magic=0x%X, msgLength=%u\n", meta->magic, meta->msgLength);
-            // }
+                    // bodyunit
+                    for(int i = 0; i < MESSAGE_BODYUNIT_SIZE && i < LISTENED_DRONES - 1; i++) {
+                        fprintf(file, "%u,%lu,%u,", rangingMessage->bodyUnits[i].address, rangingMessage->bodyUnits[i].timestamp.full % UWB_MAX_TIMESTAMP, rangingMessage->bodyUnits[i].seqNumber);
+                    }
+                    fprintf(file, "\n");
+                }
+                // fail
+                else if(transferred > MAX_PACKET_SIZE) {
+                    printf("MAX_PACKET_SIZE is small\n");
+                    exit(EXIT_FAILURE);
+                }
+                else {
+                    printf("Bulk transfer failed: %s\n", libusb_strerror(response));
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else {
+                printf("Magic number mismatch or message length too large: magic=0x%X, msgLength=%u\n", meta->magic, meta->msgLength);
+            }
         }
         // fail
         else if(transferred > MAX_PACKET_SIZE) {
