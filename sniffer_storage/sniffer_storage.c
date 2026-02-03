@@ -96,6 +96,11 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
             if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
                 response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
                 if (response == 0 && transferred == meta->msgLength) {
+                    if (transferred != sizeof(Body_Datagram_t)) {
+                        printf("Received packet wrong size: %d, not one Body_Datagram_t\n", transferred);
+                        exit(EXIT_FAILURE);
+                    }
+
                     Body_Datagram_t bodyDatagram;
                     memcpy(&bodyDatagram, payload, sizeof(Body_Datagram_t));
 
