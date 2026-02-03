@@ -1,6 +1,6 @@
 CC = gcc
 
-CFLAGS = -I/usr/include/libusb-1.0 -I../../../../../vendor/libdw3000/include -I../Inc -DSNIFFER_STORAGE_COMPILE
+CFLAGS = -I/usr/include/libusb-1.0 -I../Inc -DSNIFFER_STORAGE_COMPILE
 
 
 LDFLAGS = -lusb-1.0
