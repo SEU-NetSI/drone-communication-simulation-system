@@ -12,6 +12,7 @@
 #define     LISTENED_DRONES 2
 #define     FILENAME_SIZE   32
 #define     MAX_PACKET_SIZE 256
+#define     META_SIZE       sizeof(Sniffer_Meta_t)
 #define     MAGIC_MATCH     0xBBBB
 #define     VENDOR_ID       0x0483
 #define     PRODUCT_ID      0x5740
@@ -44,7 +45,7 @@ void generate_filename(char *buffer, size_t buffer_size) {
     struct tm *curtime;
     time(&rawtime);
     curtime = localtime(&rawtime);
-    strftime(buffer, buffer_size, "../data/raw_sensor_data.csv", curtime);
+    strftime(buffer, buffer_size, "raw_sensor_data.csv", curtime);
 }
 
 uint64_t get_system_time() {
@@ -59,12 +60,15 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
     uint8_t endpoint = 0x81; 
     int transferred;
 
+
     while (keep_running) {
         // first reception
         int response = libusb_bulk_transfer(device_handle, endpoint, buffer, MAX_PACKET_SIZE, &transferred, 5000);
         
         // success
         if(response == 0 && transferred <= MAX_PACKET_SIZE) {
+            printf("response: %d, transferred: %d\n", response, transferred);
+
             listen_lines++;
             if(listen_lines == ignore_lines) {
                 fclose(file);
@@ -94,6 +98,7 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
             fprintf(file, "%lu,", system_time);
 
             if(meta->magic == MAGIC_MATCH && meta->msgLength <= 256) {
+                printf("entering second bulk transfer...\n");
                 response = libusb_bulk_transfer(device_handle, endpoint, payload, meta->msgLength, &transferred, 5000);
                 if (response == 0 && transferred == meta->msgLength) {
                     if (transferred != sizeof(Body_Datagram_t)) {
@@ -134,6 +139,9 @@ void fprintRangingMessaage(FILE* file, libusb_device_handle *device_handle) {
                     exit(EXIT_FAILURE);
                 }
             }
+            else {
+                printf("Magic number mismatch or message length too large: magic=0x%X, msgLength=%u\n", meta->magic, meta->msgLength);
+            }
         }
         // fail
         else if(transferred > MAX_PACKET_SIZE) {
@@ -151,6 +159,9 @@ int main() {
     libusb_device_handle *device_handle = NULL;
     libusb_context *context = NULL;
     FILE *log_file;
+
+    printf("size of rangingDsrMessage: %lu\n", sizeof(Ranging_DSR_Message_t));
+
 
     signal(SIGINT, handle_sigint);
 
